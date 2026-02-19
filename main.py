@@ -10,48 +10,39 @@ import time
 TOKEN = '8596136409:AAFGfW0FyCw5-rBVJqMWomYW_BCG6Cq4zGs'
 GEMINI_KEY = 'AIzaSyDLXmf6RF22QZ7zqnmxW5VeznAbz2ywHpQ'
 
-# الروابط الرسمية للمواقع (للبحث وجلب المقالات)
-SITES = {
-    "WhatsFixer": "https://whatsfixer.blogspot.com/feeds/posts/default?alt=json",
-    "هيوتك": "https://almhtarfynalhadarm.blogspot.com/feeds/posts/default?alt=json"
-}
+# رابط مقالات WhatsFixer
+WHATSFIXER_FEED = "https://whatsfixer.blogspot.com/feeds/posts/default?alt=json"
 
 bot = telebot.TeleBot(TOKEN)
 genai.configure(api_key=GEMINI_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# --- دالة جلب المقالات من الموقعين ---
-def fetch_articles(query=""):
+# --- دالة جلب مقالات WhatsFixer ---
+def fetch_whatsfixer_articles(query=""):
     results = []
-    for name, url in SITES.items():
-        try:
-            # جلب البيانات من خلاصة بلوجر الرسمية
-            res = requests.get(url, timeout=7).json()
-            entries = res.get('feed', {}).get('entry', [])
-            
-            for e in entries:
-                title = e['title']['$t']
-                # استخراج الرابط الصحيح
-                link = next(l['href'] for l in e['link'] if l['rel'] == 'alternate')
-                
-                # تصفية النتائج بناءً على البحث
-                if not query or query.lower() in title.lower():
-                    results.append({"title": f"[{name}] {title}", "link": link})
-        except Exception as err:
-            print(f"Error fetching from {name}: {err}")
-    return results[:10] # جلب أفضل 10 نتائج
+    try:
+        res = requests.get(WHATSFIXER_FEED, timeout=7).json()
+        entries = res.get('feed', {}).get('entry', [])
+        for e in entries:
+            title = e['title']['$t']
+            link = next(l['href'] for l in e['link'] if l['rel'] == 'alternate')
+            if not query or query.lower() in title.lower():
+                results.append({"title": title, "link": link})
+    except:
+        pass
+    return results[:10]
 
 # --- لوحة المفاتيح الرئيسية ---
 def main_menu():
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    markup.add("🤖 دردشة AI", "📚 مقالات الموقعين")
+    markup.add("🤖 دردشة AI", "📚 مقالات WhatsFixer")
     markup.add("🎨 رسم صورة", "🖼 ضغط الصور")
-    markup.add("🌙 قسم رمضان", "🌍 الروابط الرسمية")
+    markup.add("🌙 قسم رمضان", "🤝 مواقع صديقة")
     return markup
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    welcome = f"هلا بك {message.from_user.first_name}! 😍\nتم ربط بوتك الآن بـ **WhatsFixer** و **هيوتك**.\nيمكنك الآن تصفح المقالات مباشرة من هنا."
+    welcome = f"هلا بك {message.from_user.first_name}! 😍\nتم تفعيل كافة الأقسام بما فيها 'مواقع صديقة'.\nكيف يمكنني مساعدتك اليوم؟"
     bot.send_message(message.chat.id, welcome, reply_markup=main_menu(), parse_mode="Markdown")
 
 @bot.message_handler(func=lambda m: True)
@@ -59,49 +50,44 @@ def handle_messages(message):
     text = message.text
     chat_id = message.chat.id
 
-    if text == "📚 مقالات الموقعين":
+    if text == "📚 مقالات WhatsFixer":
         bot.send_chat_action(chat_id, 'typing')
-        articles = fetch_articles()
+        articles = fetch_whatsfixer_articles()
         if articles:
             markup = types.InlineKeyboardMarkup()
             for a in articles:
                 markup.add(types.InlineKeyboardButton(a['title'], url=a['link']))
-            bot.send_message(chat_id, "🆕 **آخر الشروحات من الموقعين:**", reply_markup=markup, parse_mode="Markdown")
+            bot.send_message(chat_id, "🆕 **آخر شروحات WhatsFixer:**", reply_markup=markup, parse_mode="Markdown")
         else:
-            bot.send_message(chat_id, "❌ لم أتمكن من جلب المقالات، تأكد من اتصال المواقع.")
+            bot.send_message(chat_id, "❌ تعذر جلب المقالات حالياً.")
 
-    elif text == "🌍 الروابط الرسمية":
-        links = (
-            "🌍 **مواقعنا الرسمية:**\n\n"
-            "1️⃣ [WhatsFixer](https://whatsfixer.blogspot.com)\n"
-            "2️⃣ [هيوتك - المحترف الحضرمي](https://almhtarfynalhadarm.blogspot.com)"
+    elif text == "🤝 مواقع صديقة":
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("🌍 مدونة هيوتك (المحترف الحضرمي)", url="https://almhtarfynalhadarm.blogspot.com"))
+        markup.add(types.InlineKeyboardButton("📱 مدونة WhatsFixer", url="https://whatsfixer.blogspot.com"))
+        
+        info_text = (
+            "🤝 **شركاؤنا ومواقعنا الصديقة:**\n\n"
+            "ندعوكم لزيارة المواقع الصديقة التي تقدم محتوى تقني متميز وألعاب وتطبيقات."
         )
-        bot.send_message(chat_id, links, parse_mode="Markdown", disable_web_page_preview=False)
+        bot.send_message(chat_id, info_text, reply_markup=markup, parse_mode="Markdown")
 
     elif text == "🌙 قسم رمضان":
-        bot.send_message(chat_id, "🌙 **دعاء:** اللهم ارحم أرواحاً كانت تنتظر معنا رمضان وهي الآن تحت التراب.")
+        bot.send_message(chat_id, "🌙 **دعاء رمضان:** اللهم بلغنا رمضان بلاغ قبول وترحاب، وأعنا فيه على الصيام والقيام.")
 
     elif text == "🎨 رسم صورة":
-        bot.send_message(chat_id, "اكتب وصف الصورة بالإنجليزية (مثل: Space city):")
+        bot.send_message(chat_id, "اكتب وصف الصورة بالإنجليزية (مثل: A beautiful garden):")
         bot.register_next_step_handler(message, lambda msg: bot.send_photo(chat_id, f"https://pollinations.ai/p/{msg.text.replace(' ','%20')}?width=1024&height=1024"))
 
     elif text == "🖼 ضغط الصور":
         bot.send_message(chat_id, "أرسل الصورة الآن لضغطها.")
 
     else:
-        # الدردشة الذكية والبحث التلقائي
+        # الدردشة الذكية
         bot.send_chat_action(chat_id, 'typing')
-        results = fetch_articles(text)
         try:
-            prompt = f"أنت مساعد لموقع WhatsFixer وهيوتك. المستخدم يسأل: {text}."
-            response = model.generate_content(prompt)
-            
-            if results:
-                markup = types.InlineKeyboardMarkup()
-                for r in results[:3]: markup.add(types.InlineKeyboardButton(r['title'], url=r['link']))
-                bot.reply_to(message, response.text, reply_markup=markup)
-            else:
-                bot.reply_to(message, response.text)
+            response = model.generate_content(f"أنت مساعد لمدونة WhatsFixer. المستخدم يسأل: {text}")
+            bot.reply_to(message, response.text)
         except:
             bot.reply_to(message, "أنا معك! كيف يمكنني مساعدتك؟")
 

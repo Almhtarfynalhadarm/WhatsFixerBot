@@ -7,7 +7,7 @@ import google.generativeai as genai
 from PIL import Image
 import io
 
-# --- الإعدادات ---
+# --- الإعدادات (بياناتك الخاصة) ---
 TOKEN = '8596136409:AAFGfW0FyCw5-rBVJqMWomYW_BCG6Cq4zGs'
 GEMINI_KEY = 'AIzaSyDLXmf6RF22QZ7zqnmxW5VeznAbz2ywHpQ'
 MY_BLOG_ID = "102850998403664768"
@@ -15,121 +15,130 @@ BLOG_URL = "https://whatsfixer.blogspot.com"
 CHANNEL_ID = "@FixerApps"
 
 bot = telebot.TeleBot(TOKEN)
+
+# --- إعداد الذكاء الاصطناعي ---
 genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+ai_model = genai.GenerativeModel('gemini-1.5-flash')
 
 # --- بيانات قسم رمضان ---
 RAMADAN_DUAS = [
-    "اللهم بلّغنا رمضان وأنت راضٍ عنا غير غضبان.",
-    "اللهم أعنّا فيه على الصيام والقيام وغض البصر وحفظ اللسان.",
-    "اللهم اجعلنا فيه من عتقائك من النار.",
-    "يا حي يا قيوم برحمتك أستغيث، أصلح لي شأني كله ولا تكلني إلى نفسي طرفة عين."
+    "🌙 اللهم بلّغنا رمضان بلاغ قبولٍ وترحاب، وأنت راضٍ عنا.",
+    "✨ اللهم أعنّا فيه على الصيام والقيام وغض البصر وحفظ اللسان.",
+    "🤲 اللهم اجعلنا فيه من عتقائك من النار ومن المقبولين.",
+    "🕋 اللهم ارزقنا في هذا الشهر الفضيل توبة نصوحاً تمحو بها ذنوبنا."
 ]
 
-# --- دالة البحث الفائق ---
-def advanced_search(query):
-    url = f"https://www.blogger.com/feeds/{MY_BLOG_ID}/posts/default?alt=json&max-results=100"
+# --- دالة البحث الذكي عن المقالات ---
+def search_articles(query=""):
+    url = f"https://www.blogger.com/feeds/{MY_BLOG_ID}/posts/default?alt=json&max-results=50"
     try:
         res = requests.get(url, timeout=10)
         entries = res.json().get('feed', {}).get('entry', [])
-        matches = []
-        for e in entries:
-            title = e['title']['$t']
-            link = next(l['href'] for l in e['link'] if l['rel']=='alternate')
-            if query.lower() in title.lower():
-                matches.append({'title': title, 'link': link})
-        return matches[:5]
+        all_posts = [{'title': e['title']['$t'], 'link': next(l['href'] for l in e['link'] if l['rel']=='alternate')} for e in entries]
+        
+        if not query: return all_posts[:5]
+        
+        # تصفية المقالات بالكلمات المفتاحية
+        filtered = [p for p in all_posts if any(word in p['title'].lower() for word in query.lower().split())]
+        return filtered[:5]
     except: return []
 
 # --- لوحة المفاتيح الرئيسية ---
-def main_menu():
+def main_keyboard():
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     markup.add("🤖 دردشة AI", "🎨 إنشاء صورة")
-    markup.add("🖼 ضغط صور", "🌙 قسم رمضان")
+    markup.add("🖼 ضغط الصور", "🌙 قسم رمضان")
     markup.add("📚 أحدث المقالات", "🤝 مواقع صديقة")
     return markup
 
+# --- الأوامر ---
 @bot.message_handler(commands=['start'])
-def welcome(message):
-    bot.send_message(
-        message.chat.id, 
-        f"يا هلا {message.from_user.first_name}! 😍\nتم تحديث البوت بإضافات خرافية (دردشة، صور، رمضان، وضغط صور). اختر من القائمة بالأسفل 👇",
-        reply_markup=main_menu()
-    )
+def start(message):
+    name = message.from_user.first_name
+    welcome_text = f"يا هلا بيك يا {name} في بوت WhatsFixer المطوّر! 🛠\n\nأنا مساعدك التقني الشامل، اختر ما تحتاجه من القائمة:"
+    bot.send_message(message.chat.id, welcome_text, reply_markup=main_keyboard())
 
 @bot.message_handler(func=lambda m: True)
-def handle_text(message):
+def handle_all_messages(message):
     text = message.text
+    user_name = message.from_user.first_name
 
     if text == "🌙 قسم رمضان":
-        dua = "🕋 **من أدعية شهر رمضان:**\n\n" + "\n\n".join([f"✨ {d}" for d in RAMADAN_DUAS])
-        bot.send_message(message.chat.id, dua, parse_mode="Markdown")
+        dua_msg = "🕋 **أدعية شهر رمضان المبارك:**\n\n" + "\n\n".join(RAMADAN_DUAS)
+        bot.send_message(message.chat.id, dua_msg, parse_mode="Markdown")
 
     elif text == "🎨 إنشاء صورة":
-        bot.send_message(message.chat.id, "اكتب وصف الصورة التي تريدها باللغة الإنجليزية (مثلاً: A futuristic car in space)")
-        bot.register_next_step_handler(message, process_image_gen)
+        bot.send_message(message.chat.id, "اكتب وصف الصورة بالإنجليزية (مثل: Space cat) لإنشائها:")
+        bot.register_next_step_handler(message, ai_image_gen)
 
-    elif text == "🖼 ضغط صور":
-        bot.send_message(message.chat.id, "أرسل الصورة التي تريد ضغطها الآن (كصورة عادية وليس ملف).")
-
-    elif text == "🤝 مواقع صديقة":
-        bot.send_message(message.chat.id, "🤝 **شركاؤنا:**\n1. [موقع فيكسر](https://whatsfixer.blogspot.com)\nقريباً إضافة المزيد..", parse_mode="Markdown")
+    elif text == "🖼 ضغط الصور":
+        bot.send_message(message.chat.id, "أرسل الصورة (Photo) التي تريد ضغطها الآن وسأقوم بتقليل حجمها مع الحفاظ على الجودة.")
 
     elif text == "📚 أحدث المقالات":
-        results = advanced_search("")
-        m = types.InlineKeyboardMarkup()
-        for r in results: m.add(types.InlineKeyboardButton(r['title'], url=r['link']))
-        bot.send_message(message.chat.id, "📅 آخر ما تم نشره:", reply_markup=m)
+        posts = search_articles()
+        if posts:
+            m = types.InlineKeyboardMarkup()
+            for p in posts: m.add(types.InlineKeyboardButton(p['title'], url=p['link']))
+            bot.send_message(message.chat.id, "📅 **آخر الشروحات من مدونتنا:**", reply_markup=m)
+
+    elif text == "🤝 مواقع صديقة":
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("🌍 زيارة WhatsFixer", url=BLOG_URL))
+        bot.send_message(message.chat.id, "🤝 **شركاؤنا ومواقعنا الصديقة:**", reply_markup=markup)
 
     else:
-        # الدردشة مع الذكاء الاصطناعي
+        # نظام الدردشة الذكي
         bot.send_chat_action(message.chat.id, 'typing')
+        # أولاً: نبحث في المقالات لنرى إذا كان السؤال تقنياً
+        found_posts = search_articles(text)
+        
         try:
-            res = model.generate_content(f"أنت مساعد ذكي لمدونة WhatsFixer. أجب بأسلوب ودي: {text}")
-            bot.reply_to(message, res.text)
+            context = f"مقالات متعلقة: {found_posts[0]['title']}" if found_posts else "لا توجد مقالات مباشرة."
+            prompt = f"أنت مساعد ودود جداً لمدونة WhatsFixer. اسم المستخدم: {user_name}. أجب بلهجة عربية على: {text}. {context}"
+            
+            response = ai_model.generate_content(prompt)
+            reply = response.text
+            
+            if found_posts:
+                m = types.InlineKeyboardMarkup()
+                for p in found_posts: m.add(types.InlineKeyboardButton(p['title'], url=p['link']))
+                bot.reply_to(message, reply, reply_markup=m)
+            else:
+                bot.reply_to(message, reply)
         except:
-            bot.reply_to(message, "أنا معك! جرب تسألني شيء آخر.")
+            # رد احتياطي في حال فشل AI
+            if "حالك" in text:
+                bot.reply_to(message, f"بخير يا {user_name}! طمني عنك أنت؟ 😊")
+            else:
+                bot.reply_to(message, "أنا معك! جرب استخدام الأزرار في القائمة لاستكشاف خدماتي.")
 
-# --- وظيفة إنشاء الصور ---
-def process_image_gen(message):
+# --- دالة توليد الصور ---
+def ai_image_gen(message):
     prompt = message.text
-    msg = bot.send_message(message.chat.id, "⏳ جاري رسم صورتك... انتظر قليلاً")
-    image_url = f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1024&height=1024&seed=42&model=flux"
     try:
-        bot.send_photo(message.chat.id, image_url, caption=f"✅ صورتك لـ: {prompt}")
+        msg = bot.send_message(message.chat.id, "⏳ جاري الرسم بإبداع...")
+        image_url = f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1024&height=1024&model=flux"
+        bot.send_photo(message.chat.id, image_url, caption=f"✅ تم رسم: {prompt}")
     except:
-        bot.send_message(message.chat.id, "❌ عذراً، فشل إنشاء الصورة حالياً.")
+        bot.send_message(message.chat.id, "❌ فشل رسم الصورة، حاول وصفها بكلمات أخرى.")
 
-# --- وظيفة ضغط الصور ---
+# --- دالة ضغط الصور ---
 @bot.message_handler(content_types=['photo'])
-def handle_photo(message):
-    msg = bot.send_message(message.chat.id, "⚡ جاري ضغط الصورة مع الحفاظ على الجودة...")
-    file_info = bot.get_file(message.photo[-1].file_id)
-    downloaded_file = bot.download_file(file_info.file_path)
-    
-    # معالجة الصورة
-    img = Image.open(io.BytesIO(downloaded_file))
-    output = io.BytesIO()
-    img.save(output, format='JPEG', quality=40, optimize=True) # ضغط احترافي
-    output.seek(0)
-    
-    bot.send_document(message.chat.id, output, visible_file_name="compressed_image.jpg", caption="✅ تم الضغط بنجاح!")
-
-# --- النشر التلقائي ---
-def publisher():
-    global last_posted_link
-    last_posted_link = None
-    while True:
-        try:
-            res = requests.get(f"https://www.blogger.com/feeds/{MY_BLOG_ID}/posts/default?alt=json&max-results=1")
-            link = res.json()['feed']['entry'][0]['link'][4]['href']
-            if link != last_posted_link:
-                if last_posted_link:
-                    bot.send_message(CHANNEL_ID, f"🆕 **مقال جديد نزل!**\n\n🔗 [تصفح من هنا]({link})", parse_mode="Markdown")
-                last_posted_link = link
-        except: pass
-        time.sleep(600)
+def compress_img(message):
+    try:
+        bot.send_chat_action(message.chat.id, 'upload_document')
+        file_info = bot.get_file(message.photo[-1].file_id)
+        downloaded = bot.download_file(file_info.file_path)
+        
+        img = Image.open(io.BytesIO(downloaded))
+        output = io.BytesIO()
+        img.save(output, format='JPEG', quality=45, optimize=True)
+        output.seek(0)
+        
+        bot.send_document(message.chat.id, output, visible_file_name="Compressed_WhatsFixer.jpg", caption="✅ تم ضغط صورتك بنجاح مع الحفاظ على الجودة!")
+    except:
+        bot.send_message(message.chat.id, "❌ عذراً، لم أتمكن من معالجة هذه الصورة.")
 
 if __name__ == '__main__':
-    threading.Thread(target=publisher, daemon=True).start()
+    print("البوت يعمل بأقصى طاقته!")
     bot.infinity_polling()

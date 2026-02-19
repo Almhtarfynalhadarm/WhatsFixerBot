@@ -6,84 +6,117 @@ from PIL import Image
 import io
 import time
 
-# --- الإعدادات (البسيطة والفعالة) ---
+# --- الإعدادات ---
 TOKEN = '8596136409:AAFGfW0FyCw5-rBVJqMWomYW_BCG6Cq4zGs'
 GEMINI_KEY = 'AIzaSyDLXmf6RF22QZ7zqnmxW5VeznAbz2ywHpQ'
-BLOG_URL = "https://whatsfixer.blogspot.com"
+
+# روابط المواقع (Blogger IDs)
+BLOGS = {
+    "WhatsFixer": "102850998403664768",
+    "هيوتك": "3695287515024483788" # تم استخراج ID المحترف الحضرمي (هيوتك)
+}
 
 bot = telebot.TeleBot(TOKEN)
-
-# إعداد الذكاء الاصطناعي
 genai.configure(api_key=GEMINI_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# ذاكرة مؤقتة بسيطة في الرام (تختفي عند إعادة التشغيل لضمان السرعة)
-user_chats = {}
+# --- دالة البحث في المواقع ---
+def search_all_blogs(query=""):
+    results = []
+    for name, blog_id in BLOGS.items():
+        try:
+            # طلب آخر 10 مقالات من كل موقع
+            url = f"https://www.blogger.com/feeds/{blog_id}/posts/default?alt=json&max-results=10"
+            res = requests.get(url, timeout=5).json()
+            entries = res.get('feed', {}).get('entry', [])
+            
+            for e in entries:
+                title = e['title']['$t']
+                link = next(l['href'] for l in e['link'] if l['rel'] == 'alternate')
+                
+                # إذا كان هناك بحث، نتحقق من الكلمة، وإلا نجلب الكل
+                if not query or query.lower() in title.lower():
+                    results.append({"title": f"[{name}] {title}", "link": link})
+        except:
+            continue
+    return results[:8] # نكتفي بـ 8 نتائج لضمان سرعة البوت
 
+# --- لوحة المفاتيح ---
 def main_menu():
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    markup.add("🤖 دردشة ذكية", "🎨 رسم صورة", "🖼 ضغط الصور", "🌙 قسم رمضان", "📚 مقالاتنا")
+    markup.add("🤖 دردشة AI", "📚 أحدث المقالات")
+    markup.add("🎨 رسم صورة", "🖼 ضغط الصور")
+    markup.add("🌙 قسم رمضان", "🌍 مواقعنا")
     return markup
 
 @bot.message_handler(commands=['start'])
-def welcome(message):
-    uid = message.chat.id
-    user_chats[uid] = model.start_chat(history=[]) # بدء محادثة جديدة
-    bot.send_message(uid, f"يا هلا {message.from_user.first_name}! 😍\nأنا الآن جاهز تماماً. كلمني كصديق وسأفهمك.", reply_markup=main_menu())
+def start(message):
+    bot.send_message(message.chat.id, 
+                     f"مرحباً بك {message.from_user.first_name}! 🛠\nتم دمج مقالات WhatsFixer و هيوتك في محرك بحث واحد.\nاسألني عن أي تطبيق أو شرح!", 
+                     reply_markup=main_menu())
 
 @bot.message_handler(func=lambda m: True)
-def handle_text(message):
-    uid = message.chat.id
+def handle_msg(message):
     text = message.text
+    uid = message.chat.id
 
-    if text == "🌙 قسم رمضان":
-        bot.send_message(uid, "🌙 **أدعية رمضانية:**\n\nاللهم بلغنا رمضان بلاغ قبول، وأعنا فيه على الصيام والقيام.")
-    elif text == "📚 مقالاتنا":
-        bot.send_message(uid, f"🔗 تابع كل جديد في عالم التقنية:\n{BLOG_URL}")
-    elif text == "🎨 رسم صورة":
-        bot.send_message(uid, "ارسل وصف الصورة بالإنجليزية (مثلاً: A fast car in Dubai):")
-        bot.register_next_step_handler(message, draw_image)
-    elif text == "🖼 ضغط الصور":
-        bot.send_message(uid, "ارسل الصورة كـ (Photo) وسأضغطها لك فوراً.")
-    else:
-        # الدردشة الذكية (مثل Gemini)
+    if text == "📚 أحدث المقالات":
         bot.send_chat_action(uid, 'typing')
+        articles = search_all_blogs()
+        if articles:
+            m = types.InlineKeyboardMarkup()
+            for a in articles: m.add(types.InlineKeyboardButton(a['title'], url=a['link']))
+            bot.send_message(uid, "🆕 أحدث المواضيع من المواقع الصديقة:", reply_markup=m)
+        else:
+            bot.send_message(uid, "تعذر جلب المقالات حالياً.")
+
+    elif text == "🌍 مواقعنا":
+        bot.send_message(uid, "🔗 **روابطنا الرسمية:**\n1. [WhatsFixer](https://whatsfixer.blogspot.com)\n2. [هيوتك - المحترف الحضرمي](https://almhtarfynalhadarm.blogspot.com)", parse_mode="Markdown")
+
+    elif text == "🌙 قسم رمضان":
+        bot.send_message(uid, "🌙 **دعاء اليوم:**\nاللهم إنك عفو كريم تحب العفو فاعفُ عنا.")
+
+    elif text == "🎨 رسم صورة":
+        bot.send_message(uid, "اكتب وصف الصورة بالإنجليزية:")
+        bot.register_next_step_handler(message, lambda msg: bot.send_photo(uid, f"https://pollinations.ai/p/{msg.text.replace(' ','%20')}?width=1024&height=1024"))
+
+    elif text == "🖼 ضغط الصور":
+        bot.send_message(uid, "أرسل الصورة الآن.")
+
+    else:
+        # البحث الذكي والدردشة
+        bot.send_chat_action(uid, 'typing')
+        found_articles = search_all_blogs(text)
+        
         try:
-            if uid not in user_chats: user_chats[uid] = model.start_chat(history=[])
+            prompt = f"أنت مساعد تقني لمدونتي WhatsFixer وهيوتك. المستخدم يسأل عن: {text}. "
+            if found_articles:
+                prompt += f"لدينا مقالات عن ذلك مثل: {found_articles[0]['title']}. أجب بأسلوب ودود."
             
-            # توجيه الموديل
-            instruction = f"أنت Gemini، مساعد ذكي وصديق لـ {message.from_user.first_name}. أجب بلهجة ودية وذكية."
-            response = user_chats[uid].send_message(instruction + text)
-            bot.reply_to(message, response.text, parse_mode="Markdown")
+            response = model.generate_content(prompt)
+            
+            if found_articles:
+                m = types.InlineKeyboardMarkup()
+                for a in found_articles[:4]: m.add(types.InlineKeyboardButton(a['title'], url=a['link']))
+                bot.reply_to(message, response.text, reply_markup=m)
+            else:
+                bot.reply_to(message, response.text)
         except:
-            bot.reply_to(message, "أسمعك جيداً! كيف يمكنني مساعدتك اليوم؟")
+            bot.reply_to(message, "أنا معك! جرب استخدام القوائم.")
 
-def draw_image(message):
-    try:
-        prompt = message.text.replace(' ', '%20')
-        url = f"https://pollinations.ai/p/{prompt}?width=1024&height=1024&seed={int(time.time())}"
-        bot.send_photo(message.chat.id, url, caption=f"✅ تم رسم: {message.text}")
-    except:
-        bot.send_message(message.chat.id, "❌ خطأ بسيط في الرسم، حاول مرة أخرى.")
-
+# --- ضغط الصور ---
 @bot.message_handler(content_types=['photo'])
 def compress(message):
     try:
-        bot.send_chat_action(message.chat.id, 'upload_document')
         f_info = bot.get_file(message.photo[-1].file_id)
         down = bot.download_file(f_info.file_path)
         img = Image.open(io.BytesIO(down))
         out = io.BytesIO()
-        img.save(out, format='JPEG', quality=40, optimize=True)
+        img.save(out, format='JPEG', quality=45, optimize=True)
         out.seek(0)
-        bot.send_document(message.chat.id, out, visible_file_name="Compressed.jpg", caption="✅ تم الضغط بنجاح!")
+        bot.send_document(message.chat.id, out, visible_file_name="compressed.jpg")
     except:
-        bot.send_message(message.chat.id, "❌ فشل ضغط الصورة.")
+        bot.send_message(message.chat.id, "فشل ضغط الصورة.")
 
 if __name__ == '__main__':
-    # نظام الحماية من التوقف
-    while True:
-        try:
-            bot.polling(none_stop=True, interval=0, timeout=20)
-        except:
-            time.sleep(5)
+    bot.infinity_polling()

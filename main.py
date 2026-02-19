@@ -14,7 +14,7 @@ CHANNEL_ID = "@FixerApps"
 
 bot = telebot.TeleBot(TOKEN)
 
-# إعداد الذكاء الاصطناعي مع إيقاف فلاتر الأمان (لتجنب الحظر)
+# إعداد الذكاء الاصطناعي مع إيقاف فلاتر الأمان
 genai.configure(api_key=GEMINI_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
@@ -28,57 +28,68 @@ safety_settings = [
 
 last_posted_link = None
 
-def fetch_posts(query=None, max_results=5):
-    url = f"https://www.blogger.com/feeds/{MY_BLOG_ID}/posts/default?alt=json"
-    if query: url += f"&q={query}"
-    else: url += f"&max-results={max_results}"
+# --- دالة جلب المقالات المارنة (البحث بالكلمات) ---
+def fetch_posts_flexible(query=None, max_results=10):
+    # جلب قائمة كبيرة من المقالات الأخيرة للبحث فيها يدوياً
+    url = f"https://www.blogger.com/feeds/{MY_BLOG_ID}/posts/default?alt=json&max-results=50"
     try:
         res = requests.get(url, timeout=10)
         entries = res.json().get('feed', {}).get('entry', [])
-        return [{'title': e['title']['$t'], 'link': next(l['href'] for l in e['link'] if l['rel']=='alternate')} for e in entries]
+        all_posts = [{'title': e['title']['$t'], 'link': next(l['href'] for l in e['link'] if l['rel']=='alternate')} for e in entries]
+        
+        if not query:
+            return all_posts[:5]
+        
+        # تصفية المقالات بناءً على وجود الكلمة في العنوان (البحث المرن)
+        filtered_posts = []
+        words = query.lower().split()
+        for post in all_posts:
+            if any(word in post['title'].lower() for word in words):
+                filtered_posts.append(post)
+        
+        return filtered_posts[:5] # إرجاع أفضل 5 نتائج
     except: return []
 
 def get_ai_answer(text, name):
-    # جلب روابط حقيقية أولاً
-    posts = fetch_posts(query=text, max_results=3)
+    # البحث المرن عن المقالات
+    posts = fetch_posts_flexible(query=text)
     links_text = ""
     if posts:
-        links_text = "\n".join([f"🔗 {p['title']}\n{p['link']}" for p in posts])
+        links_text = "💡 **مقالات من مدونتنا قد تهمك:**\n" + "\n".join([f"🔗 {p['title']}\n{p['link']}" for p in posts])
     
-    prompt = f"أنت خبير تقني لموقع WhatsFixer. المستخدم {name} يسأل عن: {text}. أجب بلهجة ودية جداً وإذا كان هناك روابط في الأسفل أخبره عنها."
+    # تحضير السؤال للذكاء الاصطناعي
+    prompt = f"أنت خبير تقني لموقع WhatsFixer. المستخدم {name} يسأل عن: {text}. أجب بلهجة ودية جداً كصديق خبير. إذا وجدت روابط مقالات متعلقة سأرفقها لك أسفل الرد."
 
     try:
-        # محاولة الرد بالذكاء الاصطناعي مع إعدادات الأمان المنخفضة
         response = model.generate_content(prompt, safety_settings=safety_settings)
         ai_text = response.text
         return f"{ai_text}\n\n{links_text}" if links_text else ai_text
     except:
-        # إذا فشل الذكاء الاصطناعي تماماً، نعطيه الروابط بشكل مباشر ومنظم
         if links_text:
-            return f"يا هلا {name}! بحثت لك ووجدت هذه النتائج في مدونتنا:\n\n{links_text}"
-        return f"يا هلا {name}! لم أجد نتائج دقيقة لـ '{text}'، لكن يمكنك تصفح آخر شروحاتنا هنا: {BLOG_URL}"
+            return f"يا هلا {name}! تفضل هذه الشروحات التي وجدتها لك حول '{text}':\n\n{links_text}"
+        return f"يا هلا {name}! لم أجد نتائج دقيقة لـ '{text}' حالياً، جرب كتابة كلمة أخرى مثل 'واتساب' أو 'كيبورد' أو تصفح هنا: {BLOG_URL}"
 
 @bot.message_handler(commands=['start'])
 def start(message):
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("🌍 الموقع الرسمي", url=BLOG_URL))
-    bot.send_message(message.chat.id, f"أهلاً {message.from_user.first_name}! 🛠\nاكتب اسم البرنامج أو المشكلة وسأعطيك الشرح فوراً.", reply_markup=markup)
+    markup.add(types.InlineKeyboardButton("🌍 زيارة المدونة", url=BLOG_URL))
+    bot.send_message(message.chat.id, f"أهلاً {message.from_user.first_name}! 🛠\nاكتب أي كلمة (مثلاً: كيبورد، حظر، تحديث) وسأجيبك فوراً.", reply_markup=markup)
 
 @bot.message_handler(func=lambda message: True)
 def handle_chat(message):
     bot.send_chat_action(message.chat.id, 'typing')
     answer = get_ai_answer(message.text, message.from_user.first_name)
-    bot.reply_to(message, answer)
+    bot.reply_to(message, answer, parse_mode="Markdown")
 
-# --- النشر التلقائي ---
+# --- النشر التلقائي للقناة ---
 def auto_publisher():
     global last_posted_link
     while True:
         try:
-            posts = fetch_posts(max_results=1)
+            posts = fetch_posts_flexible(max_results=1)
             if posts and posts[0]['link'] != last_posted_link:
                 if last_posted_link:
-                    bot.send_message(CHANNEL_ID, f"🆕 **مقال جديد نزل!**\n\n📌 {posts[0]['title']}\n\n🔗 {posts[0]['link']}")
+                    bot.send_message(CHANNEL_ID, f"🆕 **مقال جديد نزل!**\n\n📌 {posts[0]['title']}\n\n🔗 {posts[0]['link']}", parse_mode="Markdown")
                 last_posted_link = posts[0]['link']
         except: pass
         time.sleep(600)

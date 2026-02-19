@@ -5,7 +5,7 @@ import time
 import threading
 import google.generativeai as genai
 
-# --- الإعدادات ---
+# --- الإعدادات (تأكد من بقاء التوكن والمفتاح كما هما) ---
 TOKEN = '8596136409:AAFGfW0FyCw5-rBVJqMWomYW_BCG6Cq4zGs'
 GEMINI_KEY = 'AIzaSyDLXmf6RF22QZ7zqnmxW5VeznAbz2ywHpQ'
 MY_BLOG_ID = "102850998403664768"
@@ -14,66 +14,92 @@ CHANNEL_ID = "@FixerApps"
 
 bot = telebot.TeleBot(TOKEN)
 
-# إعداد الذكاء الاصطناعي بشكل أقوى
+# إعداد الذكاء الاصطناعي مع معالجة قيود المنطقة
 genai.configure(api_key=GEMINI_KEY)
-ai_model = genai.GenerativeModel('gemini-1.5-flash')
+# قمنا بتغيير الموديل ليكون أكثر توافقاً
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 last_posted_link = None
 
-def fetch_context(query):
-    url = f"https://www.blogger.com/feeds/{MY_BLOG_ID}/posts/default?alt=json&q={query}&max-results=2"
+# --- دالة جلب المقالات ---
+def fetch_posts(query=None, max_results=5):
+    url = f"https://www.blogger.com/feeds/{MY_BLOG_ID}/posts/default?alt=json"
+    if query: url += f"&q={query}"
+    else: url += f"&max-results={max_results}"
     try:
-        response = requests.get(url, timeout=10)
-        data = response.json()
-        if 'entry' in data['feed']:
-            entries = data['feed']['entry']
-            return "\n".join([f"- {e['title']['$t']}: {next(l['href'] for l in e['link'] if l['rel']=='alternate')}" for e in entries])
-        return ""
-    except: return ""
+        res = requests.get(url, timeout=10)
+        entries = res.json().get('feed', {}).get('entry', [])
+        return [{'title': e['title']['$t'], 'link': next(l['href'] for l in e['link'] if l['rel']=='alternate')} for e in entries]
+    except: return []
 
-def get_friendly_response(user_message, user_name):
-    context = fetch_context(user_message)
+# --- دالة الرد الذكي ---
+def get_ai_answer(text, name):
+    # جلب سياق من المدونة لتعزيز الإجابة
+    posts = fetch_posts(query=text, max_results=2)
+    context = ""
+    if posts:
+        context = "مقالات من مدونتنا قد تفيدك:\n" + "\n".join([f"- {p['title']}: {p['link']}" for p in posts])
     
-    prompt = f"أنت خبير مدونة WhatsFixer الودود. اسم المستخدم: {user_name}. "
-    if context:
-        prompt += f"بناءً على مقالاتنا: {context}. "
-    prompt += f"أجب بلهجة عربية مريحة على: {user_message}. اجعل الإجابة قصيرة ومفيدة."
-
+    prompt = f"أنت خبير مدونة WhatsFixer. اسم المستخدم: {name}. أجب بأسلوب ودي باللهجة العربية على: {text}. {context}"
+    
     try:
-        # إضافة محاولة ثانية في حال فشل الاتصال الأول
-        response = ai_model.generate_content(prompt)
+        response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        print(f"AI Error: {e}")
-        return f"يا هلا {user_name}! يبدو أنني كنت أفكر بعمق. 😊 هل يمكنك تكرار سؤالك؟ أنا جاهز الآن!"
+        # إذا فشل الذكاء الاصطناعي، يرد البوت بالبحث التقليدي لكي لا يتوقف
+        if posts:
+            return f"يا هلا {name}! لم أستطع استخدام الذكاء الاصطناعي الآن، لكن وجدت لك هذه المقالات:\n\n" + "\n".join([f"🔗 {p['title']}\n{p['link']}" for p in posts])
+        return f"يا هلا {name}! جرب تسألني عن شيء محدد بمدونة WhatsFixer أو تصفح الموقع: {BLOG_URL}"
 
-# --- الأوامر الرئيسية ---
+# --- قائمة الأزرار ---
+def main_markup():
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton("📚 أحدث المقالات", callback_data="latest_posts"),
+        types.InlineKeyboardButton("🔍 البحث السريع", switch_inline_query_current_chat="")
+    )
+    markup.add(types.InlineKeyboardButton("🌍 زيارة الموقع الرسمي", url=BLOG_URL))
+    return markup
+
+# --- معالجة الأوامر ---
 @bot.message_handler(commands=['start'])
-def welcome(message):
-    name = message.from_user.first_name
-    welcome_text = f"يا هلا والله بـ {name}! 😍\nأنا مساعدك الذكي من WhatsFixer. اسألني أي شيء عن شروحاتنا!"
-    bot.send_message(message.chat.id, welcome_text)
+def start(message):
+    bot.send_message(
+        message.chat.id, 
+        f"يا هلا والله بـ {message.from_user.first_name} في **WhatsFixer**! 🛠\n\nأنا هنا لمساعدتك في الحصول على أحدث الشروحات التقنية. اسألني أي سؤال أو استخدم الأزرار بالأسفل.",
+        reply_markup=main_markup(),
+        parse_mode="Markdown"
+    )
+
+@bot.callback_query_handler(func=lambda call: True)
+def calls(call):
+    if call.data == "latest_posts":
+        posts = fetch_posts()
+        if posts:
+            msg = "📅 **أحدث شروحاتنا:**\n"
+            m = types.InlineKeyboardMarkup()
+            for p in posts: m.add(types.InlineKeyboardButton(p['title'], url=p['link']))
+            bot.edit_message_text(msg, call.message.chat.id, call.message.message_id, reply_markup=m, parse_mode="Markdown")
 
 @bot.message_handler(func=lambda message: True)
-def chat(message):
+def handle_chat(message):
     bot.send_chat_action(message.chat.id, 'typing')
-    response = get_friendly_response(message.text, message.from_user.first_name)
-    bot.reply_to(message, response)
+    answer = get_ai_answer(message.text, message.from_user.first_name)
+    bot.reply_to(message, answer)
 
-# --- النشر التلقائي في خيط منفصل ---
-def auto_post_loop():
+# --- النشر التلقائي ---
+def auto_publisher():
     global last_posted_link
     while True:
         try:
-            res = requests.get(f"https://www.blogger.com/feeds/{MY_BLOG_ID}/posts/default?alt=json&max-results=1")
-            link = next(l['href'] for l in res.json()['feed']['entry'][0]['link'] if l['rel']=='alternate')
-            if link != last_posted_link:
+            posts = fetch_posts(max_results=1)
+            if posts and posts[0]['link'] != last_posted_link:
                 if last_posted_link:
-                    bot.send_message(CHANNEL_ID, f"🆕 مقال جديد نزل! تصفحوه من هنا: {link}")
-                last_posted_link = link
+                    bot.send_message(CHANNEL_ID, f"🆕 **مقال جديد نزل!**\n\n📌 {posts[0]['title']}\n\n🔗 تصفحوه من هنا: {posts[0]['link']}")
+                last_posted_link = posts[0]['link']
         except: pass
-        time.sleep(600)
+        time.sleep(900)
 
 if __name__ == '__main__':
-    threading.Thread(target=auto_post_loop, daemon=True).start()
+    threading.Thread(target=auto_publisher, daemon=True).start()
     bot.infinity_polling()

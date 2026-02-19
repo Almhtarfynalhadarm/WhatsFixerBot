@@ -1,7 +1,7 @@
 import telebot
 import requests
-import google.generativeai as genai
 from telebot import types
+import google.generativeai as genai
 from PIL import Image
 import io
 import time
@@ -10,113 +10,114 @@ import time
 TOKEN = '8596136409:AAFGfW0FyCw5-rBVJqMWomYW_BCG6Cq4zGs'
 GEMINI_KEY = 'AIzaSyDLXmf6RF22QZ7zqnmxW5VeznAbz2ywHpQ'
 
-# روابط المواقع (Blogger IDs)
-BLOGS = {
-    "WhatsFixer": "102850998403664768",
-    "هيوتك": "3695287515024483788" # تم استخراج ID المحترف الحضرمي (هيوتك)
+# الروابط الرسمية للمواقع (للبحث وجلب المقالات)
+SITES = {
+    "WhatsFixer": "https://whatsfixer.blogspot.com/feeds/posts/default?alt=json",
+    "هيوتك": "https://almhtarfynalhadarm.blogspot.com/feeds/posts/default?alt=json"
 }
 
 bot = telebot.TeleBot(TOKEN)
 genai.configure(api_key=GEMINI_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# --- دالة البحث في المواقع ---
-def search_all_blogs(query=""):
+# --- دالة جلب المقالات من الموقعين ---
+def fetch_articles(query=""):
     results = []
-    for name, blog_id in BLOGS.items():
+    for name, url in SITES.items():
         try:
-            # طلب آخر 10 مقالات من كل موقع
-            url = f"https://www.blogger.com/feeds/{blog_id}/posts/default?alt=json&max-results=10"
-            res = requests.get(url, timeout=5).json()
+            # جلب البيانات من خلاصة بلوجر الرسمية
+            res = requests.get(url, timeout=7).json()
             entries = res.get('feed', {}).get('entry', [])
             
             for e in entries:
                 title = e['title']['$t']
+                # استخراج الرابط الصحيح
                 link = next(l['href'] for l in e['link'] if l['rel'] == 'alternate')
                 
-                # إذا كان هناك بحث، نتحقق من الكلمة، وإلا نجلب الكل
+                # تصفية النتائج بناءً على البحث
                 if not query or query.lower() in title.lower():
                     results.append({"title": f"[{name}] {title}", "link": link})
-        except:
-            continue
-    return results[:8] # نكتفي بـ 8 نتائج لضمان سرعة البوت
+        except Exception as err:
+            print(f"Error fetching from {name}: {err}")
+    return results[:10] # جلب أفضل 10 نتائج
 
-# --- لوحة المفاتيح ---
+# --- لوحة المفاتيح الرئيسية ---
 def main_menu():
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    markup.add("🤖 دردشة AI", "📚 أحدث المقالات")
+    markup.add("🤖 دردشة AI", "📚 مقالات الموقعين")
     markup.add("🎨 رسم صورة", "🖼 ضغط الصور")
-    markup.add("🌙 قسم رمضان", "🌍 مواقعنا")
+    markup.add("🌙 قسم رمضان", "🌍 الروابط الرسمية")
     return markup
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, 
-                     f"مرحباً بك {message.from_user.first_name}! 🛠\nتم دمج مقالات WhatsFixer و هيوتك في محرك بحث واحد.\nاسألني عن أي تطبيق أو شرح!", 
-                     reply_markup=main_menu())
+    welcome = f"هلا بك {message.from_user.first_name}! 😍\nتم ربط بوتك الآن بـ **WhatsFixer** و **هيوتك**.\nيمكنك الآن تصفح المقالات مباشرة من هنا."
+    bot.send_message(message.chat.id, welcome, reply_markup=main_menu(), parse_mode="Markdown")
 
 @bot.message_handler(func=lambda m: True)
-def handle_msg(message):
+def handle_messages(message):
     text = message.text
-    uid = message.chat.id
+    chat_id = message.chat.id
 
-    if text == "📚 أحدث المقالات":
-        bot.send_chat_action(uid, 'typing')
-        articles = search_all_blogs()
+    if text == "📚 مقالات الموقعين":
+        bot.send_chat_action(chat_id, 'typing')
+        articles = fetch_articles()
         if articles:
-            m = types.InlineKeyboardMarkup()
-            for a in articles: m.add(types.InlineKeyboardButton(a['title'], url=a['link']))
-            bot.send_message(uid, "🆕 أحدث المواضيع من المواقع الصديقة:", reply_markup=m)
+            markup = types.InlineKeyboardMarkup()
+            for a in articles:
+                markup.add(types.InlineKeyboardButton(a['title'], url=a['link']))
+            bot.send_message(chat_id, "🆕 **آخر الشروحات من الموقعين:**", reply_markup=markup, parse_mode="Markdown")
         else:
-            bot.send_message(uid, "تعذر جلب المقالات حالياً.")
+            bot.send_message(chat_id, "❌ لم أتمكن من جلب المقالات، تأكد من اتصال المواقع.")
 
-    elif text == "🌍 مواقعنا":
-        bot.send_message(uid, "🔗 **روابطنا الرسمية:**\n1. [WhatsFixer](https://whatsfixer.blogspot.com)\n2. [هيوتك - المحترف الحضرمي](https://almhtarfynalhadarm.blogspot.com)", parse_mode="Markdown")
+    elif text == "🌍 الروابط الرسمية":
+        links = (
+            "🌍 **مواقعنا الرسمية:**\n\n"
+            "1️⃣ [WhatsFixer](https://whatsfixer.blogspot.com)\n"
+            "2️⃣ [هيوتك - المحترف الحضرمي](https://almhtarfynalhadarm.blogspot.com)"
+        )
+        bot.send_message(chat_id, links, parse_mode="Markdown", disable_web_page_preview=False)
 
     elif text == "🌙 قسم رمضان":
-        bot.send_message(uid, "🌙 **دعاء اليوم:**\nاللهم إنك عفو كريم تحب العفو فاعفُ عنا.")
+        bot.send_message(chat_id, "🌙 **دعاء:** اللهم ارحم أرواحاً كانت تنتظر معنا رمضان وهي الآن تحت التراب.")
 
     elif text == "🎨 رسم صورة":
-        bot.send_message(uid, "اكتب وصف الصورة بالإنجليزية:")
-        bot.register_next_step_handler(message, lambda msg: bot.send_photo(uid, f"https://pollinations.ai/p/{msg.text.replace(' ','%20')}?width=1024&height=1024"))
+        bot.send_message(chat_id, "اكتب وصف الصورة بالإنجليزية (مثل: Space city):")
+        bot.register_next_step_handler(message, lambda msg: bot.send_photo(chat_id, f"https://pollinations.ai/p/{msg.text.replace(' ','%20')}?width=1024&height=1024"))
 
     elif text == "🖼 ضغط الصور":
-        bot.send_message(uid, "أرسل الصورة الآن.")
+        bot.send_message(chat_id, "أرسل الصورة الآن لضغطها.")
 
     else:
-        # البحث الذكي والدردشة
-        bot.send_chat_action(uid, 'typing')
-        found_articles = search_all_blogs(text)
-        
+        # الدردشة الذكية والبحث التلقائي
+        bot.send_chat_action(chat_id, 'typing')
+        results = fetch_articles(text)
         try:
-            prompt = f"أنت مساعد تقني لمدونتي WhatsFixer وهيوتك. المستخدم يسأل عن: {text}. "
-            if found_articles:
-                prompt += f"لدينا مقالات عن ذلك مثل: {found_articles[0]['title']}. أجب بأسلوب ودود."
-            
+            prompt = f"أنت مساعد لموقع WhatsFixer وهيوتك. المستخدم يسأل: {text}."
             response = model.generate_content(prompt)
             
-            if found_articles:
-                m = types.InlineKeyboardMarkup()
-                for a in found_articles[:4]: m.add(types.InlineKeyboardButton(a['title'], url=a['link']))
-                bot.reply_to(message, response.text, reply_markup=m)
+            if results:
+                markup = types.InlineKeyboardMarkup()
+                for r in results[:3]: markup.add(types.InlineKeyboardButton(r['title'], url=r['link']))
+                bot.reply_to(message, response.text, reply_markup=markup)
             else:
                 bot.reply_to(message, response.text)
         except:
-            bot.reply_to(message, "أنا معك! جرب استخدام القوائم.")
+            bot.reply_to(message, "أنا معك! كيف يمكنني مساعدتك؟")
 
 # --- ضغط الصور ---
 @bot.message_handler(content_types=['photo'])
-def compress(message):
+def compress_img(message):
     try:
         f_info = bot.get_file(message.photo[-1].file_id)
         down = bot.download_file(f_info.file_path)
         img = Image.open(io.BytesIO(down))
         out = io.BytesIO()
-        img.save(out, format='JPEG', quality=45, optimize=True)
+        img.save(out, format='JPEG', quality=40)
         out.seek(0)
-        bot.send_document(message.chat.id, out, visible_file_name="compressed.jpg")
+        bot.send_document(chat_id=message.chat.id, document=out, visible_file_name="compressed.jpg")
     except:
-        bot.send_message(message.chat.id, "فشل ضغط الصورة.")
+        bot.send_message(message.chat.id, "فشل الضغط.")
 
 if __name__ == '__main__':
     bot.infinity_polling()

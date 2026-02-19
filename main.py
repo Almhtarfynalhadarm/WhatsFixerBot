@@ -1,11 +1,10 @@
 import telebot
 import requests
 from telebot import types
-import time
-import threading
 import google.generativeai as genai
 from PIL import Image
 import io
+import time
 
 # --- الإعدادات ---
 TOKEN = '8596136409:AAFGfW0FyCw5-rBVJqMWomYW_BCG6Cq4zGs'
@@ -19,81 +18,72 @@ bot = telebot.TeleBot(TOKEN)
 genai.configure(api_key=GEMINI_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# ذاكرة ذكية للمستخدمين
-user_memory = {}
-
-def get_chat_response(user_id, user_name, text):
-    # إذا لم يكن للمستخدم جلسة، ننشئ واحدة جديدة
-    if user_id not in user_memory:
-        user_memory[user_id] = model.start_chat(history=[])
-    
-    try:
-        # توجيه الموديل ليكون مثلي تماماً في الأسلوب
-        instruction = f"أنت مساعد ذكي بشري، اسمك Gemini، تعمل لصالح مدونة WhatsFixer. المستخدم اسمه {user_name}. أجب بذكاء، وود، وعمق. تذكر ما قاله المستخدم سابقاً."
-        full_prompt = f"{instruction}\nالمستخدم: {text}"
-        
-        response = user_memory[user_id].send_message(full_prompt)
-        return response.text
-    except Exception:
-        # إذا "خبط" أو حدث خطأ، نقوم بتصفير الذاكرة وإعادة المحاولة لمرة واحدة
-        user_memory[user_id] = model.start_chat(history=[])
-        return "معذرة، شعرت ببعض الدوار للحظة! أعدت تنشيط ذاكرتي، كيف يمكنني مساعدتك الآن؟"
-
-# --- لوحة المفاتيح ---
-def main_keyboard():
+# لوحة مفاتيح سهلة وسريعة
+def main_menu():
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    markup.add("🤖 دردشة AI", "🎨 إنشاء صورة")
+    markup.add("🤖 دردشة ذكية", "🎨 رسم صورة")
     markup.add("🖼 ضغط الصور", "🌙 قسم رمضان")
-    markup.add("📚 أحدث المقالات", "🤝 مواقع صديقة")
+    markup.add("📚 مقالاتنا", "🤝 شركاؤنا")
     return markup
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    user_id = message.chat.id
-    user_memory[user_id] = model.start_chat(history=[]) # تصفير عند البداية
-    bot.send_message(user_id, f"أهلاً {message.from_user.first_name}! 🌹\nأنا الآن جاهز تماماً للدردشة معك بذكاء. اسألني أي شيء!", reply_markup=main_keyboard())
+    bot.send_message(message.chat.id, f"هلا والله {message.from_user.first_name}! 🌹\nتم إصلاح كل المشاكل، أنا الحين شغال تمام ومستعد أسولف معك.", reply_markup=main_menu())
 
 @bot.message_handler(func=lambda m: True)
 def handle_all(message):
-    uid = message.chat.id
-    name = message.from_user.first_name
     text = message.text
+    chat_id = message.chat.id
 
     if text == "🌙 قسم رمضان":
-        bot.send_message(uid, "🌙 **اللهم بلغنا رمضان وأنت راضٍ عنا.**\n\n- اللهم أعنا فيه على الصيام والقيام.\n- اللهم اجعلنا من عتقائك من النار.")
-    elif text == "📚 أحدث المقالات":
-        bot.send_message(uid, f"🔗 تابع كل جديد هنا:\n{BLOG_URL}")
-    elif text == "🎨 إنشاء صورة":
-        bot.send_message(uid, "اكتب وصف الصورة بالإنجليزية (مثل: A futuristic city):")
-        bot.register_next_step_handler(message, ai_gen)
+        bot.send_message(chat_id, "🕋 **أدعية رمضانية:**\n\n- اللهم بلغنا رمضان وأنت راضٍ عنا.\n- اللهم أعنا على صيامه وقيامه.")
+    
+    elif text == "📚 مقالاتنا":
+        bot.send_message(chat_id, f"🔗 تصفح أحدث المواضيع هنا:\n{BLOG_URL}")
+
+    elif text == "🎨 رسم صورة":
+        bot.send_message(chat_id, "اكتب وصف الصورة بالإنجليزي الحين (مثال: A blue lion):")
+        bot.register_next_step_handler(message, drawing)
+
     elif text == "🖼 ضغط الصور":
-        bot.send_message(uid, "أرسل الصورة وسأقوم بضغطها فوراً.")
+        bot.send_message(chat_id, "أرسل لي أي صورة وراح أضغطها لك بجودة عالية.")
+
+    elif text == "🤝 شركاؤنا":
+        bot.send_message(chat_id, f"🤝 نحن نفخر بخدمتكم عبر مدونة WhatsFixer.")
+
     else:
-        # الدردشة الذكية المستقرة
-        bot.send_chat_action(uid, 'typing')
-        reply = get_chat_response(uid, name, text)
-        bot.reply_to(message, reply, parse_mode="Markdown")
+        # نظام الدردشة السلس (بدون تخبيط)
+        bot.send_chat_action(chat_id, 'typing')
+        try:
+            # توجيه الموديل يرد بكلمات بسيطة وودية
+            prompt = f"أنت مساعد ودود للمستخدم {message.from_user.first_name}. أجب باختصار وذكاء: {text}"
+            response = model.generate_content(prompt)
+            bot.reply_to(message, response.text)
+        except:
+            bot.reply_to(message, "معك يا غالي! بس النت عندي شوي بطيء، وش كنت تقول؟")
 
-def ai_gen(message):
+# وظيفة الرسم
+def drawing(message):
     try:
-        prompt = message.text
-        url = f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1024&height=1024&seed={int(time.time())}"
-        bot.send_photo(message.chat.id, url, caption=f"✅ تم رسم: {prompt}")
+        url = f"https://pollinations.ai/p/{message.text.replace(' ', '%20')}?width=1024&height=1024"
+        bot.send_photo(message.chat.id, url, caption="✅ تفضل هذي صورتك!")
     except:
-        bot.send_message(message.chat.id, "❌ حدث ضغط على خدمة الصور، حاول مجدداً.")
+        bot.send_message(message.chat.id, "❌ فشلت في الرسم، جرب وصف ثاني.")
 
+# وظيفة ضغط الصور
 @bot.message_handler(content_types=['photo'])
-def compress(message):
+def compress_image(message):
     try:
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded = bot.download_file(file_info.file_path)
         img = Image.open(io.BytesIO(downloaded))
         output = io.BytesIO()
-        img.save(output, format='JPEG', quality=45, optimize=True)
+        img.save(output, format='JPEG', quality=40)
         output.seek(0)
-        bot.send_document(message.chat.id, output, visible_file_name="fixed_image.jpg", caption="✅ تم ضغط الصورة بنجاح!")
+        bot.send_document(message.chat.id, output, visible_file_name="compressed.jpg", caption="✅ تم الضغط بنجاح!")
     except:
-        bot.send_message(message.chat.id, "❌ خطأ في المعالجة.")
+        bot.send_message(message.chat.id, "❌ ما قدرت أضغط هذي الصورة.")
 
 if __name__ == '__main__':
+    print("البوت شغال..")
     bot.infinity_polling()

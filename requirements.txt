@@ -1,1 +1,5 @@
-pip install pyTelegramBotAPI google-generativeai python-dotenv requests Pillow
+pyTelegramBotAPI
+requests
+google-generativeai
+python-dotenv
+Pillow

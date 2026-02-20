@@ -7,10 +7,10 @@ import io
 import time
 import threading
 
-# --- الإعدادات ---
+# --- الإعدادات (تنبيه: قم بتغيير التوكن والمفتاح إذا قمت بتغييرهم في الواقع) ---
 TOKEN = '8596136409:AAFGfW0FyCw5-rBVJqMWomYW_BCG6Cq4zGs'
 GEMINI_KEY = 'AIzaSyDLXmf6RF22QZ7zqnmxW5VeznAbz2ywHpQ'
-CHANNEL_ID = '@FixerApps'  # تأكد أن هذا هو معرف قناتك الصحيح
+CHANNEL_ID = '@FixerApps'  
 WHATSFIXER_FEED = "https://whatsfixer.blogspot.com/feeds/posts/default?alt=json"
 
 bot = telebot.TeleBot(TOKEN)
@@ -19,6 +19,32 @@ model = genai.GenerativeModel('gemini-1.5-flash')
 
 # لتخزين آخر مقال تم نشره ومنع التكرار
 last_posted_link = None
+
+# --- قائمة الـ 20 موقعاً للقرآن الكريم ---
+ISLAMIC_SITES_FULL = """
+📖 **أفضل 20 موقعاً لتحميل واستماع القرآن الكريم:**
+
+1️⃣ **MP3 Quran:** الأشهر عالمياً للتحميل المباشر.
+2️⃣ **TVQuran:** جودة عالية وسهولة فائقة.
+3️⃣ **Islamway:** أرشيف ضخم جداً لمختلف القراء.
+4️⃣ **Quran.com:** للقراءة، التفسير، والاستماع التفاعلي.
+5️⃣ **مجمع الملك فهد:** المصدر الرسمي لأدق النسخ الرقمية.
+6️⃣ **تطبيق وموقع آية (Ayah):** الأفضل للتدبر والتفسير.
+7️⃣ **المكتبة الصوتية (Quran Central):** سرعة في التحميل.
+8️⃣ **Surahquran:** مصاحف كاملة بروابط مباشرة.
+9️⃣ **نداء الإسلام:** تلاوات نادرة ومميزة.
+🔟 **المصحف الإلكتروني (KSU):** مشروع جامعة الملك سعود.
+11 **QuranicAudio:** يجمع أشهر القراء بجودة CD.
+12 **موقع مداد:** علوم القرآن والتلاوات.
+13 **موقع نون:** متخصص في التفسير المسموع.
+14 **ترتيل (Tarteel):** تصحيح التلاوة بالذكاء الاصطناعي.
+15 **المصحف الجامع:** مكتبة القراءات العشر.
+16 **هدى القران:** تنظيم رائع حسب الأجزاء.
+17 **التلاوات الخاشعة:** تلاوات مؤثرة ومختارة.
+18 **إسلام ويب (الصوتيات):** مكتبة شاملة ودروس.
+19 **Audio Quran:** تلاوات نقية جداً.
+20 **موقع السراج:** للبحث في آيات القرآن الكريم.
+"""
 
 # --- دالة جلب مقالات WhatsFixer ---
 def fetch_articles():
@@ -38,54 +64,79 @@ def fetch_articles():
 def auto_post_to_channel():
     global last_posted_link
     while True:
-        articles = fetch_articles()
-        if articles:
-            latest_article = articles[0]
-            # إذا كان الرابط جديداً ولم يتم نشره في هذه الدورة
-            if latest_article['link'] != last_posted_link:
-                message = f"🆕 **مقال جديد في WhatsFixer**\n\n📌 {latest_article['title']}\n\n🔗 اقرأ المزيد هنا:\n{latest_article['link']}"
-                try:
+        try:
+            articles = fetch_articles()
+            if articles:
+                latest_article = articles[0]
+                if latest_article['link'] != last_posted_link:
+                    message = f"🆕 **مقال جديد في WhatsFixer**\n\n📌 {latest_article['title']}\n\n🔗 اقرأ المزيد هنا:\n{latest_article['link']}"
                     bot.send_message(CHANNEL_ID, message, parse_mode="Markdown")
                     last_posted_link = latest_article['link']
                     print(f"تم النشر في القناة: {latest_article['title']}")
-                except Exception as e:
-                    print(f"خطأ في النشر للقناة: {e}")
+        except Exception as e:
+            print(f"خطأ في خيط النشر: {e}")
         
-        time.sleep(600)  # يفحص الموقع كل 10 دقائق
+        time.sleep(600)  # فحص كل 10 دقائق
 
-# تشغيل خيط النشر التلقائي في الخلفية
+# تشغيل خيط النشر في الخلفية
 threading.Thread(target=auto_post_to_channel, daemon=True).start()
 
-# --- لوحة المفاتيح والدردشة (كما هي) ---
+# --- القوائم ولوحة التحكم ---
 def main_menu():
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     markup.add("🤖 دردشة AI", "📚 مقالات WhatsFixer")
     markup.add("🎨 رسم صورة", "🖼 ضغط الصور")
-    markup.add("🌙 قسم رمضان", "🤝 مواقع صديقة")
+    markup.add("🌙 قسم رمضان", "📖 مواقع القرآن الكريم")
+    markup.add("🤝 مواقع صديقة")
     return markup
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "مرحباً بك! تم تفعيل نظام النشر التلقائي للقناة بنجاح. ✅", reply_markup=main_menu())
+    welcome_text = (
+        "مرحباً بك في بوت الخدمة المتكامل! 🤖\n\n"
+        "✅ تم تفعيل النشر التلقائي للقناة.\n"
+        "✅ تم ربط الذكاء الاصطناعي Gemini 1.5.\n"
+        "✅ تم إضافة قائمة المواقع الإسلامية.\n\n"
+        "اختر من القائمة أدناه للبدء 👇"
+    )
+    bot.send_message(message.chat.id, welcome_text, reply_markup=main_menu())
 
 @bot.message_handler(func=lambda m: True)
 def handle_text(message):
     text = message.text
+    
     if text == "📚 مقالات WhatsFixer":
         articles = fetch_articles()
         if articles:
             m = types.InlineKeyboardMarkup()
-            for a in articles[:8]: m.add(types.InlineKeyboardButton(a['title'], url=a['link']))
-            bot.send_message(message.chat.id, "🆕 آخر المقالات:", reply_markup=m)
+            for a in articles[:8]: 
+                m.add(types.InlineKeyboardButton(a['title'], url=a['link']))
+            bot.send_message(message.chat.id, "🆕 آخر المقالات من WhatsFixer:", reply_markup=m)
+        else:
+            bot.send_message(message.chat.id, "❌ تعذر جلب المقالات حالياً.")
+
+    elif text == "📖 مواقع القرآن الكريم":
+        bot.send_message(message.chat.id, ISLAMIC_SITES_FULL, parse_mode="Markdown", disable_web_page_preview=True)
+
     elif text == "🤝 مواقع صديقة":
         bot.send_message(message.chat.id, "🌍 [مدونة هيوتك](https://almhtarfynalhadarm.blogspot.com)", parse_mode="Markdown")
-    # ... بقية الأقسام (الصور، رمضان) كما في الكود السابق
-    else:
-        try:
-            res = model.generate_content(text)
-            bot.reply_to(message, res.text)
-        except:
-            bot.reply_to(message, "أنا معك!")
 
+    elif text == "🌙 قسم رمضان":
+        bot.send_message(message.chat.id, "🌙 **قسم رمضان المبارك**\n\nقريباً سيتم إضافة إمساكية رمضان وأذكار الصباح والمساك.")
+
+    elif text == "🤖 دردشة AI":
+        bot.send_message(message.chat.id, "تفضل، أنا أسمعك.. اكتب أي شيء وسأرد عليك باستخدام ذكاء Gemini.")
+
+    else:
+        # معالجة الدردشة العامة عبر Gemini
+        try:
+            bot.send_chat_action(message.chat.id, 'typing')
+            res = model.generate_content(text)
+            bot.reply_to(message, res.text, parse_mode="Markdown")
+        except Exception as e:
+            bot.reply_to(message, "أنا معك! كيف يمكنني مساعدتك؟")
+
+# تشغيل البوت
 if __name__ == '__main__':
+    print("البوت يعمل بنجاح...")
     bot.infinity_polling()

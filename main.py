@@ -6,10 +6,6 @@ import telebot
 from telebot import types
 from PIL import Image, ImageDraw, ImageFont
 import io
-from dotenv import load_dotenv
-
-# تحميل الإعدادات
-load_dotenv()
 
 # --- الإعدادات ---
 TOKEN = '8596136409:AAFGfW0FyCw5-rBVJqMWomYW_BCG6Cq4zGs'
@@ -17,27 +13,27 @@ CHANNEL_ID = '@FixerApps'
 WHATSFIXER_FEED = "https://whatsfixer.blogspot.com/feeds/posts/default?alt=json"
 
 bot = telebot.TeleBot(TOKEN)
-user_states = {} # لتتبع حالة المستخدم (هل يريد الكتابة على الصورة أم الضغط)
+user_states = {}  # لتخزين حالة المستخدم (بحث، ضغط، كتابة)
 
-# --- قائمة الـ 20 موقعاً مع الروابط ---
+# --- قائمة الـ 20 موقعاً مع روابطها المباشرة ---
 QURAN_SITES = """
-📖 **أفضل 20 موقعاً لتحميل واستماع القرآن (روابط مباشرة):**
+📖 **أفضل 20 موقعاً لتحميل واستماع القرآن الكريم:**
 
-1️⃣ [MP3 Quran](https://www.mp3quran.net)
-2️⃣ [TVQuran](https://www.tvquran.com)
-3️⃣ [Quran.com](https://quran.com)
-4️⃣ [Islamway](https://ar.islamway.net/quran)
-5️⃣ [QuranicAudio](https://quranicaudio.com)
-6️⃣ [مجمع الملك فهد](https://qurancomplex.gov.sa)
-7️⃣ [تطبيق آية](https://ayahapp.com)
-8️⃣ [Quran Central](https://qurancentral.com)
-9️⃣ [Surah Quran](https://surahquran.com)
-🔟 [المصحف الإلكتروني](http://quran.ksu.edu.sa)
+1️⃣ [MP3 Quran - المكتبة الصوتية](https://www.mp3quran.net)
+2️⃣ [TVQuran - تي في قرآن](https://www.tvquran.com)
+3️⃣ [Quran.com - المصحف الإلكتروني](https://quran.com)
+4️⃣ [Islamway - طريق الإسلام](https://ar.islamway.net/quran)
+5️⃣ [QuranicAudio - تلاوات بجودة عالية](https://quranicaudio.com)
+6️⃣ [مجمع الملك فهد لطباعة المصحف](https://qurancomplex.gov.sa)
+7️⃣ [تطبيق آية - Ayah App](https://ayahapp.com)
+8️⃣ [Quran Central - مركز القرآن](https://qurancentral.com)
+9️⃣ [Surah Quran - سورة قرآن](https://surahquran.com)
+🔟 [المصحف الإلكتروني بجامعة الملك سعود](http://quran.ksu.edu.sa)
 11️⃣ [ن للقرآن وعلومه](https://www.nquran.com)
-12️⃣ [مدونة تلاوة](https://www.tilawa.net)
-13️⃣ [ترتيل](https://www.tarteel.ai)
-14️⃣ [إسلام ويب](https://audio.islamweb.net)
-15️⃣ [نداء الإسلام](https://www.islam-call.com)
+12️⃣ [مدونة تلاوة - مصاحف كاملة](https://www.tilawa.net)
+13️⃣ [ترتيل - البحث بالصوت](https://www.tarteel.ai)
+14️⃣ [إسلام ويب - قسم الصوتيات](https://audio.islamweb.net)
+15️⃣ [نداء الإسلام - تلاوات نادرة](https://www.islam-call.com)
 16️⃣ [طريق الصالحين](https://www.saleheen.com)
 17️⃣ [المستودع الدعوي](https://almustadaw.com)
 18️⃣ [هدى القرآن](https://www.hudaquran.com)
@@ -45,7 +41,7 @@ QURAN_SITES = """
 20️⃣ [موقع السراج](https://www.al-siraj.com)
 """
 
-# --- دالة جلب المقالات ---
+# --- دالة جلب المقالات والبحث ---
 def fetch_articles(query=None):
     try:
         res = requests.get(WHATSFIXER_FEED, timeout=15).json()
@@ -60,9 +56,10 @@ def fetch_articles(query=None):
             else:
                 articles.append({"title": title, "link": link})
         return articles
-    except: return []
+    except:
+        return []
 
-# --- لوحة المفاتيح ---
+# --- لوحة الأزرار الرئيسية ---
 def main_menu():
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     markup.add("📖 مواقع القرآن الكريم", "📚 مقالات WhatsFixer")
@@ -86,75 +83,79 @@ def handle_text(message):
         articles = fetch_articles()
         if articles:
             m = types.InlineKeyboardMarkup()
-            for a in articles[:5]: m.add(types.InlineKeyboardButton(a['title'], url=a['link']))
+            for a in articles[:8]:
+                m.add(types.InlineKeyboardButton(a['title'], url=a['link']))
             bot.send_message(uid, "🆕 آخر المقالات:", reply_markup=m)
 
     elif text == "🔍 بحث في الموقع":
-        bot.send_message(uid, "أرسل الكلمة التي تريد البحث عنها في الموقع:")
-        user_states[uid] = 'searching'
+        user_states[uid] = "searching"
+        bot.send_message(uid, "🔎 أرسل الكلمة التي تريد البحث عنها في الموقع:")
 
     elif text == "🖼 ضغط الصور":
-        bot.send_message(uid, "أرسل الصورة التي تريد ضغطها الآن.")
-        user_states[uid] = 'compressing'
+        user_states[uid] = "compressing"
+        bot.send_message(uid, "🖼 أرسل الصورة التي تريد ضغطها الآن.")
 
     elif text == "✍️ كتابة نص على صورة":
-        bot.send_message(uid, "أرسل الصورة أولاً، ثم سأطلب منك النص.")
-        user_states[uid] = 'waiting_image_for_text'
+        user_states[uid] = "waiting_image"
+        bot.send_message(uid, "🖼 أرسل الصورة التي تريد الكتابة عليها.")
 
-    elif uid in user_states and user_states[uid] == 'searching':
+    # معالجة البحث
+    elif uid in user_states and user_states[uid] == "searching":
         results = fetch_articles(text)
         if results:
             m = types.InlineKeyboardMarkup()
-            for r in results[:5]: m.add(types.InlineKeyboardButton(r['title'], url=r['link']))
-            bot.send_message(uid, f"🔍 نتائج البحث عن '{text}':", reply_markup=m)
+            for r in results[:10]:
+                m.add(types.InlineKeyboardButton(r['title'], url=r['link']))
+            bot.send_message(uid, f"🔍 نتائج البحث عن: {text}", reply_markup=m)
         else:
-            bot.send_message(uid, "لم يتم العثور على نتائج.")
-        user_states.pop(uid)
+            bot.send_message(uid, "❌ لم يتم العثور على نتائج.")
+        del user_states[uid]
 
-    elif uid in user_states and user_states[uid] == 'waiting_text':
-        # معالجة إضافة نص للصورة (تكملة الوظيفة تحت)
-        pass
+    # معالجة استلام النص بعد الصورة
+    elif uid in user_states and isinstance(user_states[uid], dict) and user_states[uid]['action'] == "waiting_text":
+        process_image_text(message)
 
-# --- معالجة الصور ---
+# --- معالجة الصور (الضغط والكتابة) ---
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
     uid = message.chat.id
-    if uid not in user_states: return
+    if uid not in user_states:
+        return
 
     file_info = bot.get_file(message.photo[-1].file_id)
     downloaded_file = bot.download_file(file_info.file_path)
-    img = Image.open(io.BytesIO(downloaded_file))
-
-    if user_states[uid] == 'compressing':
+    
+    if user_states[uid] == "compressing":
+        img = Image.open(io.BytesIO(downloaded_file))
         out = io.BytesIO()
-        img.save(out, format="JPEG", quality=20) # ضغط عالي
+        img.save(out, format="JPEG", quality=30, optimize=True)
         out.seek(0)
-        bot.send_photo(uid, out, caption="✅ تم ضغط الصورة بنجاح!")
-        user_states.pop(uid)
+        bot.send_photo(uid, out, caption="✅ تم ضغط الصورة وتقليل حجمها.")
+        del user_states[uid]
 
-    elif user_states[uid] == 'waiting_image_for_text':
-        user_states[uid] = {'action': 'adding_text', 'image': downloaded_file}
-        bot.send_message(uid, "الآن أرسل النص الذي تريد كتابته على الصورة.")
+    elif user_states[uid] == "waiting_image":
+        user_states[uid] = {"action": "waiting_text", "image": downloaded_file}
+        bot.send_message(uid, "📝 الآن أرسل النص الذي تريد كتابته على الصورة:")
 
-@bot.message_handler(func=lambda m: isinstance(user_states.get(m.chat.id), dict))
-def add_text_to_image(message):
+def process_image_text(message):
     uid = message.chat.id
-    state = user_states[uid]
-    
-    img = Image.open(io.BytesIO(state['image']))
-    draw = ImageDraw.Draw(img)
     text = message.text
+    image_data = user_states[uid]['image']
     
-    # محاولة إضافة نص في المنتصف
-    w, h = img.size
-    draw.text((w/2, h/2), text, fill="white") 
+    img = Image.open(io.BytesIO(image_data))
+    draw = ImageDraw.Draw(img)
+    
+    # تحديد مكان النص (في المنتصف)
+    width, height = img.size
+    # ملاحظة: لإضافة خطوط عربية احترافية ستحتاج لملف خط .ttf في السيرفر
+    draw.text((width/2, height/2), text, fill="white")
     
     out = io.BytesIO()
     img.save(out, format="JPEG")
     out.seek(0)
-    bot.send_photo(uid, out, caption="✅ تم إضافة النص!")
-    user_states.pop(uid)
+    bot.send_photo(uid, out, caption="✅ تم إضافة النص إلى الصورة.")
+    del user_states[uid]
 
 if __name__ == '__main__':
-    print("البوت المطور يعمل الآن...")
+    print("البوت يعمل بكامل الميزات المضافة...")
     bot.infinity_polling()

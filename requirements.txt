@@ -1,5 +1,1 @@
-pyTelegramBotAPI==4.26.0
-requests==2.32.3
-google-generativeai==0.8.4
-Pillow==11.1.0
-python-dotenv==1.0.1
+pip install pyTelegramBotAPI google-generativeai python-dotenv requests Pillow
